@@ -221,6 +221,7 @@ function SWEP:Think()
 	end
 
 	if IsValid(self.target) and not self.target:Alive() then
+		// TODO: Allow traitor to pick up RSB from target
 		self:RSBClear()
 		ply:PrintMessage(4, "Your target died, and you throw away the remote")
 	
