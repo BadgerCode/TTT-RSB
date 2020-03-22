@@ -94,8 +94,6 @@ function SWEP:SecondaryAttack()
 
 				self.armedandready = true
 				self.arming = false
-				
-				self:SendWarn(true)
 
 				timer.Create("targetBeeping", 3, 0, function()
 					if IsValid(self.target) then
@@ -177,6 +175,8 @@ function SWEP:StickyPlant()
 					self.Planted = true
 					self.target = target
 					target.attachedRSB = self
+
+					self:SendWarn(true)
 					
 					net.Start("RSBTarget")
 					net.WriteEntity(self.target)
