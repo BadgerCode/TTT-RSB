@@ -234,7 +234,8 @@ function SWEP:SendWarn(armed)
 	net.WriteBool(armed)
 	net.WriteEntity(self.target)
 
-	local traitors = GetTraitorFilter(true)
+	local onlyTellAlivePlayers = armed
+	local traitors = GetTraitorFilter(onlyTellAlivePlayers)
 	table.RemoveByValue(traitors, self.target)
 	
 	net.Send(traitors)
@@ -385,7 +386,7 @@ if CLIENT then
 		local ent = net.ReadEntity()
 		local idx = ent:EntIndex()	
 		
-		if armed then					
+		if armed then
 			RSB.bombs[idx] = idx
 		else		
 			RSB.bombs[idx] = nil
