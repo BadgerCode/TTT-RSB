@@ -52,6 +52,7 @@ SWEP.NoSights = true
 if SERVER then
 	util.AddNetworkString("BombBar")
 	util.AddNetworkString("RSBTarget")
+	util.AddNetworkString("RSBResetTarget")
 	util.AddNetworkString("RSBWarning")
 end
 
@@ -66,6 +67,11 @@ end
 
 function SWEP:SecondaryAttack()
 	self:SetNextSecondaryFire(CurTime() + self.Secondary.Delay)
+
+	if(self.Planted and IsValid(self.target) == false) then
+		self:HandleTargetLeft()
+		return
+	end
 
 	if self.arming == false and self.armedandready == false and self.Planted == true then
 		self.arming = true
@@ -120,7 +126,9 @@ function SWEP:PrimaryAttack()
 	local ply = self.Owner
 
 	if self.armedandready == true then
-		if self.target:Alive() then
+		if(IsValid(self.target) == false) then
+			self:HandleTargetLeft()
+		elseif self.target:Alive() then
 			self.targetWTF = CreateSound(self.target, "mm/wtf.mp3") -- Plays that annoying loud noise
 			self.targetWTF:PlayEx(1, 100)
 			self.targetWTF:SetSoundLevel(0.2)
@@ -136,6 +144,7 @@ function SWEP:PrimaryAttack()
 				end
 			end)
 		else
+			-- TODO: allow player to reclaim bomb from body
 			self:Remove()
 			self.target = nil
 		end
@@ -198,6 +207,10 @@ function SWEP:RSBClear()
 	timer.Remove("targetBeeping")
 	self.arming = false
 	self.armedandready = false
+
+	if(IsValid(self.target)) then
+		self.target.attachedRSB = nil
+	end
 	self.target = nil
 
 	if IsValid(self.loopingSound) and self.loopingSound:IsPlaying() then
@@ -211,6 +224,18 @@ function SWEP:RSBClear()
 	net.Start("BombBar")
 	net.WriteBit(false)
 	net.Send(ply)
+
+	net.Start("RSBResetTarget")
+	net.Send(ply)
+end
+
+function SWEP:HandleTargetLeft()
+	self:RSBClear()
+	self.Planted = false
+
+	if(IsValid(self.Owner)) then
+		self.Owner:PrintMessage(HUD_PRINTCENTER, "Your target has left. You may plant another bomb.")
+	end
 end
 
 function SWEP:Think()
@@ -288,6 +313,7 @@ function SWEP:Reload()
 end
 
 function SWEP:PreDrop()
+	-- This code never runs when self.AllowDrop is false
 	if self.AllowDrop == false then
 		timer.Remove("rsb_anim")
 		timer.Remove("targetBeeping")
@@ -333,7 +359,8 @@ end
 ]]--
 
 if CLIENT then
-	local targetText = "You have no target!"
+	local initialTargetText = "You have no target!"
+	local targetText = initialTargetText
 
 	local hudtxt = {
 		{
@@ -394,7 +421,16 @@ if CLIENT then
 		end	
 	end)
 
-	net.Receive("RSBTarget", function(length, client)
+	net.Receive("RSBResetTarget", function(len)
+		ChargeTimer = 0
+		EnableCam = true
+		StepSize = MaxWidth / (ChargeTimer * 10)
+		StepPercent = 100 / (ChargeTimer * 10)
+		targetText = initialTargetText
+		hudtxt[4]["text"] = initialTargetText
+	end)
+
+	net.Receive("RSBTarget", function(len)
 		target = net.ReadEntity()
 		
 		if(IsValid(target)) then
