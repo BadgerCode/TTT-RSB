@@ -54,6 +54,7 @@ if SERVER then
 	util.AddNetworkString("RSBTarget")
 	util.AddNetworkString("RSBResetTarget")
 	util.AddNetworkString("RSBWarning")
+	util.AddNetworkString("RSBReclaimed")
 end
 
 if CLIENT then
@@ -67,96 +68,112 @@ end
 
 function SWEP:SecondaryAttack()
 	self:SetNextSecondaryFire(CurTime() + self.Secondary.Delay)
+	if not SERVER then return end
 
-	if(self.Planted and IsValid(self.target) == false) then
+	if not self.Planted then
+		self:StickyPlant()
+		return
+	end
+
+	if(IsValid(self.target) == false) then
 		self:HandleTargetLeft()
 		return
 	end
 
-	if self.arming == false and self.armedandready == false and self.Planted == true then
-		self.arming = true
-		self.AllowDrop = false
-		enty = self.Owner:GetActiveWeapon()
+	if(self.target:Alive() == false) then
+		self.Owner:PrintMessage(HUD_PRINTCENTER, "Your target has died! Reclaim the RSB from their corpse.")
+		return
+	end
 
-		if SERVER then
-			local ply = self.Owner
-			net.Start("BombBar")
-			net.WriteBit(true)
-			net.Send(ply)
-			self.BaseClass.ShootEffects(self)
+	if self.arming then return end
 
-			timer.Create("rsb_anim", 1, 0, function()
-				if IsValid(self) then
-					self.loopingSound = CreateSound(self, "weapons/c4/c4_beep1.wav") -- Plays that annoying loud noise
-					self.loopingSound:PlayEx(0.5, 100)
-					self.loopingSound:SetSoundLevel(0.2)
-				end
-			end)
+	if self.armedandready == true then
+		self.Owner:PrintMessage(HUD_PRINTCENTER, "You've already charged.")
+		return
+	end
 
-			timer.Simple(GetConVar("RSB_ChargeTimer"):GetInt(), function()
-				if IsValid(self.loopingSound) and self.loopingSound():IsPlaying() then
-					self.loopingSound:Stop()
-				end
+	self.arming = true
+	self.AllowDrop = false
 
-				self.armedandready = true
-				self.arming = false
+	local ply = self.Owner
+	net.Start("BombBar")
+	net.WriteBit(true)
+	net.Send(ply)
+	self.BaseClass.ShootEffects(self)
 
-				timer.Create("targetBeeping", 3, 0, function()
-					if IsValid(self.target) then
-						self.targetBeeping = CreateSound(self.target, "weapons/c4/c4_beep1.wav") -- Plays that annoying loud noise
-						self.targetBeeping:PlayEx(0.5, 100)
-						self.targetBeeping:SetSoundLevel(0.2)
-					end
-				end)
-
-				timer.Remove("rsb_anim")
-			end)
+	timer.Create("rsb_anim", 1, 0, function()
+		if IsValid(self) then
+			self.loopingSound = CreateSound(self, "weapons/c4/c4_beep1.wav") -- Plays that annoying loud noise
+			self.loopingSound:PlayEx(0.5, 100)
+			self.loopingSound:SetSoundLevel(0.2)
 		end
-	elseif self.arming == false and self.armedandready == true then
-		self.Owner:PrintMessage(4, "You've already charged.")
-	end
+	end)
 
-	if not self.Planted then
-		self:StickyPlant()
-	end
+	timer.Simple(GetConVar("RSB_ChargeTimer"):GetInt(), function()
+		if IsValid(self.loopingSound) and self.loopingSound():IsPlaying() then
+			self.loopingSound:Stop()
+		end
+
+		self.armedandready = true
+		self.arming = false
+
+		timer.Create("targetBeeping", 3, 0, function()
+			if IsValid(self.target) then
+				self.targetBeeping = CreateSound(self.target, "weapons/c4/c4_beep1.wav") -- Plays that annoying loud noise
+				self.targetBeeping:PlayEx(0.5, 100)
+				self.targetBeeping:SetSoundLevel(0.2)
+			end
+		end)
+
+		timer.Remove("rsb_anim")
+	end)
 end
 
 function SWEP:PrimaryAttack()
 	self:SetNextPrimaryFire(CurTime() + self.Primary.Delay)
-	local ply = self.Owner
+	if not SERVER then return end
 
-	if self.armedandready == true then
-		if(IsValid(self.target) == false) then
-			self:HandleTargetLeft()
-		elseif self.target:Alive() then
-			self.targetWTF = CreateSound(self.target, "mm/wtf.mp3") -- Plays that annoying loud noise
-			self.targetWTF:PlayEx(1, 100)
-			self.targetWTF:SetSoundLevel(0.2)
-
-			timer.Simple(1, function()
-				if ply:Alive() then
-					timer.Remove("targetBeeping")
-					net.Start("BombBar")
-					net.WriteBit(false)
-					net.Send(ply)
-					self:Remove()
-					self:DetonateBomb()
-				end
-			end)
-		else
-			-- TODO: allow player to reclaim bomb from body
-			self:Remove()
-			self.target = nil
-		end
-	else
-		if self.arming == false then
-			self.Owner:PrintMessage(4, "You need to charge first!")
-		end
-
-		if self.arming == true then
-			self.Owner:PrintMessage(HUD_PRINTTALK, "You are charging still, wait before detonating!")
-		end
+	if not self.Planted then
+		self.Owner:PrintMessage(HUD_PRINTCENTER, "Plant your RSB on a player by right clicking.")
+		return
 	end
+
+	if(IsValid(self.target) == false) then
+		self:HandleTargetLeft()
+		return
+	end
+
+	if(self.target:Alive() == false) then
+		self.Owner:PrintMessage(HUD_PRINTCENTER, "Your target has died! Reclaim the RSB from their corpse.")
+		return
+	end
+
+	if self.armedandready == false then
+		self.Owner:PrintMessage(HUD_PRINTCENTER, "You need to charge first!")
+		return
+	end
+
+	if self.arming then
+		self.Owner:PrintMessage(HUD_PRINTTALK, "You are charging still, wait before detonating!")
+		return
+	end
+
+
+	local ply = self.Owner
+	self.targetWTF = CreateSound(self.target, "mm/wtf.mp3") -- Plays that annoying loud noise
+	self.targetWTF:PlayEx(1, 100)
+	self.targetWTF:SetSoundLevel(0.2)
+
+	timer.Simple(1, function()
+		if ply:Alive() then
+			timer.Remove("targetBeeping")
+			net.Start("BombBar")
+			net.WriteBit(false)
+			net.Send(ply)
+			self:Remove()
+			self:DetonateBomb()
+		end
+	end)
 end
 
 -- Replicating C4 placing on a wall, but rather on a player
@@ -199,12 +216,15 @@ function SWEP:StickyPlant()
 end
 
 function SWEP:RSBClear()
+	if not SERVER then return end
+
 	local ply = self.Owner
 	
 	self:SendWarn(false)
 	
 	timer.Remove("rsb_anim")
 	timer.Remove("targetBeeping")
+	self.Planted = false
 	self.arming = false
 	self.armedandready = false
 
@@ -212,6 +232,11 @@ function SWEP:RSBClear()
 		self.target.attachedRSB = nil
 	end
 	self.target = nil
+
+	if(IsValid(self.targetCorpse)) then
+		self.targetCorpse.unexplodedRSB = nil
+	end
+	self.targetCorpse = nil
 
 	if IsValid(self.loopingSound) and self.loopingSound:IsPlaying() then
 		self.loopingSound:Stop()
@@ -238,19 +263,27 @@ function SWEP:HandleTargetLeft()
 	end
 end
 
+function SWEP:HandleTargetDeath(corpse)
+	self.Owner:PrintMessage(HUD_PRINTCENTER, "Your RSB target " .. self.target:Nick() .. " has died")
+	self.Owner:PrintMessage(HUD_PRINTTALK, "Search " .. self.target:Nick() .. "'s body to find your RSB.")
+	self.targetCorpse = corpse
+	self:SendWarn(false)
+end
+
+function SWEP:ReclaimRSB()
+	self:RSBClear()
+	self.Owner:PrintMessage(HUD_PRINTTALK, "You have found your RSB. Plant it on someone else")
+	net.Start("RSBReclaimed")
+	net.Send(self.Owner)
+end
+
 function SWEP:Think()
 	local ply = self.Owner
 
 	if not ply:Alive() then
 		self:RSBClear()
-	end
-
-	if IsValid(self.target) and not self.target:Alive() then
-		// TODO: Allow traitor to pick up RSB from target
-		self:RSBClear()
-		ply:PrintMessage(4, "Your target died, and you throw away the remote")
-	
 		self:Remove()
+		return
 	end
 end
 
@@ -275,6 +308,7 @@ function SWEP:DetonateBomb()
 
 		if IsValid(self.target) then
 			if IsValid(bomb) then
+				self.target.attachedRSB = nil
 				bomb:SetPos(self.target:GetPos())
 				bomb:SetOwner(ply)
 				bomb:SetParent(self.target)
@@ -341,7 +375,7 @@ end
 function SWEP:Holster()
 	if self.arming == true then
 		if self.Owner:IsValid() then
-			self.Owner:PrintMessage(4, "You can't switch weapon whilst charging!")
+			self.Owner:PrintMessage(HUD_PRINTCENTER, "You can't switch weapon whilst charging!")
 		end
 
 		self.AllowDrop = false
@@ -426,6 +460,11 @@ if CLIENT then
 		EnableCam = true
 		StepSize = MaxWidth / (ChargeTimer * 10)
 		StepPercent = 100 / (ChargeTimer * 10)
+		CurrentWidth = 0
+		CurrentPercent = 0
+		ShowPercent = 0
+		Finished = true
+		DrawReady = false
 		targetText = initialTargetText
 		hudtxt[4]["text"] = initialTargetText
 	end)
@@ -560,7 +599,12 @@ if CLIENT then
 			DrawReady = false
 		end
 	end
-end
 
-net.Receive("BombBar", DrawBar)
-hook.Add("HUDPaint", "DrawBox", DrawBox)
+	net.Receive("BombBar", DrawBar)
+	hook.Add("HUDPaint", "DrawBox", DrawBox)
+
+	local reclaimSound = Sound("weapons/c4/c4_disarm.wav")
+	net.Receive("RSBReclaimed", function()
+		surface.PlaySound(reclaimSound)
+	end)
+end
